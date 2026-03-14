@@ -4,79 +4,67 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-player_positions = {}
-chat_messages = []
-roblox_chat_queue = []
+# Store data in memory
+minecraft_data = {"players": {}, "chat": []}
+roblox_data = {"players": {}, "chat": []}
 
+# --------------------------
+# Minecraft Endpoints
+# --------------------------
 
-@app.route("/positions", methods=["POST"])
-def update_positions():
+@app.route("/MCstate", methods=["POST"])
+def mc_state():
+    """Minecraft sends its data (positions, messages, etc.)"""
     data = request.get_json()
-
-    for player in data.get("players", []):
+    if not data:
+        return jsonify({"error": "No JSON provided"}), 400
+    
+    players = data.get("players", [])
+    for player in players:
         username = player.get("username")
+        if username:
+            minecraft_data["players"][username] = player
+            messages = player.get("messages", [])
+            if messages:
+                minecraft_data["chat"].extend([{"user": username, "msg": msg} for msg in messages])
+    
+    return jsonify({"status": "ok"}), 200
 
-        player_positions[username] = {
-            "x": player.get("x"),
-            "y": player.get("y"),
-            "z": player.get("z"),
-            "yaw": player.get("yaw"),
-            "pitch": player.get("pitch")
-        }
+@app.route("/MCreceive", methods=["GET"])
+def mc_receive():
+    """Minecraft fetches Roblox info (messages & users)"""
+    return jsonify(roblox_data)
 
-    return jsonify({"status": "ok"})
+# --------------------------
+# Roblox Endpoints
+# --------------------------
 
-
-@app.route("/chat", methods=["POST"])
-def minecraft_chat():
+@app.route("/RBLXState", methods=["POST"])
+def rblx_state():
+    """Roblox sends its messages"""
     data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON provided"}), 400
+    
+    players = data.get("players", [])
+    for player in players:
+        username = player.get("username")
+        if username:
+            roblox_data["players"][username] = player
+            messages = player.get("messages", [])
+            if messages:
+                roblox_data["chat"].extend([{"user": username, "msg": msg} for msg in messages])
+    
+    return jsonify({"status": "ok"}), 200
 
-    chat_messages.append({
-        "username": data.get("username"),
-        "message": data.get("message")
-    })
+@app.route("/RBLXreceive", methods=["GET"])
+def rblx_receive():
+    """Roblox fetches Minecraft info (positions, messages, users)"""
+    return jsonify(minecraft_data)
 
-    return jsonify({"status": "ok"})
+# --------------------------
+# Run server
+# --------------------------
 
-
-@app.route("/robloxchat", methods=["POST"])
-def roblox_chat():
-    data = request.get_json()
-
-    roblox_chat_queue.append({
-        "username": data.get("username"),
-        "message": data.get("message")
-    })
-
-    return jsonify({"status": "ok"})
-
-
-@app.route("/robloxchat", methods=["GET"])
-def get_roblox_chat():
-    global roblox_chat_queue
-
-    messages = roblox_chat_queue
-    roblox_chat_queue = []
-
-    return jsonify(messages)
-
-
-@app.route("/state", methods=["GET"])
-def get_state():
-    global chat_messages
-
-    messages = chat_messages
-    chat_messages = []
-
-    return jsonify({
-        "players": player_positions,
-        "chat": messages
-    })
-
-
-@app.route("/")
-def home():
-    return "Minecraft ↔ Roblox API Running"
-
-
-app.run(host="0.0.0.0", port=10000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
