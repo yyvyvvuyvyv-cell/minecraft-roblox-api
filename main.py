@@ -4,39 +4,79 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-state = {
-    "players": {},
-    "chat": [],
-    "server": {}
-}
+player_positions = {}
+chat_messages = []
+roblox_chat_queue = []
 
-@app.route("/state", methods=["POST"])
-def update_state():
+
+@app.route("/positions", methods=["POST"])
+def update_positions():
     data = request.get_json()
 
-    if "players" in data:
-        for p in data["players"]:
-            state["players"][p["name"]] = p
+    for player in data.get("players", []):
+        username = player.get("username")
 
-    if "chat" in data:
-        state["chat"].extend(data["chat"])
+        player_positions[username] = {
+            "x": player.get("x"),
+            "y": player.get("y"),
+            "z": player.get("z"),
+            "yaw": player.get("yaw"),
+            "pitch": player.get("pitch")
+        }
 
-    if "server" in data:
-        state["server"] = data["server"]
+    return jsonify({"status": "ok"})
 
-    return jsonify({"status":"ok"})
+
+@app.route("/chat", methods=["POST"])
+def minecraft_chat():
+    data = request.get_json()
+
+    chat_messages.append({
+        "username": data.get("username"),
+        "message": data.get("message")
+    })
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/robloxchat", methods=["POST"])
+def roblox_chat():
+    data = request.get_json()
+
+    roblox_chat_queue.append({
+        "username": data.get("username"),
+        "message": data.get("message")
+    })
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/robloxchat", methods=["GET"])
+def get_roblox_chat():
+    global roblox_chat_queue
+
+    messages = roblox_chat_queue
+    roblox_chat_queue = []
+
+    return jsonify(messages)
 
 
 @app.route("/state", methods=["GET"])
 def get_state():
-    global state
+    global chat_messages
 
-    response = state.copy()
-    response["chat"] = state["chat"]
+    messages = chat_messages
+    chat_messages = []
 
-    state["chat"] = []  # clear chat after sending
+    return jsonify({
+        "players": player_positions,
+        "chat": messages
+    })
 
-    return jsonify(response)
+
+@app.route("/")
+def home():
+    return "Minecraft ↔ Roblox API Running"
 
 
 app.run(host="0.0.0.0", port=10000)
